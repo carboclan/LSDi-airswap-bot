@@ -4,7 +4,7 @@ import 'regenerator-runtime/runtime';
 import BigNumber from 'bignumber.js';
 import { ethers } from 'ethers';
 import { fetch } from 'node-fetch';
-import { Router } from 'airswap.js/src/protocolMessaging';
+import Router from 'airswap.js/src/protocolMessaging';
 
 import { erc20Generic } from './abi/erc20Generic';
 import { Utils } from './Utils';
@@ -13,11 +13,26 @@ console.log('Configuring maker...');
 
 const cdai = '0xf5dce57282a584d2746faf1593d3121fcac444dc';
 
+console.log('collateralAddress', process.env.COLLATERAL_ADDRESS);
+const collateralAddress = Utils.validateHexString(process.env.COLLATERAL_ADDRESS);
+const priceFeed = `https://api.compound.finance/api/v2/ctoken?addresses[]=${cdai}`;
+
+const privateKey = process.env.PRIVATE_KEY;
+
+const eighteen = BigNumber('1000000000000000000');
+const five = BigNumber('100000');
+const thirteen = '0000000000000';
+
+const eighteenToFive = num => BigNumber(num).dividedBy(eighteen).multipliedBy(five);
+
+console.log('tokens', process.env.TOKENS);
+const tokens = process.env.TOKENS.split(',').map(token => Utils.validateHexString(token));
+
 const config = {
-  collateralAddress: Utils.validateHexString(process.env.COLLATERAL_ADDRESS),
-  priceFeed: `https://api.compound.finance/api/v2/ctoken?addresses[]=${cdai}`,
-  privateKey: Utils.validateHexString(process.env.PRIVATE_KEY),
-  tokens: process.env.TOKENS.split(',').map(Utils.validateHexString),
+  collateralAddress,
+  priceFeed,
+  privateKey,
+  tokens,
 };
 
 const provider = ethers.getDefaultProvider();
@@ -36,10 +51,13 @@ const getPrice = async () => {
   const { value } = feed[0].supply_rate;
 
   // TODO: Any math here... rounding!!
-  return value;
+  return BigNumber(value).multiplyBy(100).dp(2);
 };
 
+console.log('erc20', erc20Generic);
+
 const getBalance = async (makerAddress, tokenAddress) => {
+  console.log('getBalance maker:', makerAddress, 'token:', tokenAddress);
   const contract = new ethers.Contract(tokenAddress, erc20Generic, provider);
   const balance = await contract.balanceOf(makerAddress);
   return Utils.wrapAsBigNumber(balance.toString());
@@ -100,8 +118,6 @@ const main = async () => {
     process.exit(1);
   });
 
-  console.log('Setting intents...');
-
   const intents = [];
 
   config.tokens.forEach((token) => {
@@ -113,9 +129,14 @@ const main = async () => {
     });
   });
 
-  await router.setIntents(intents);
+  console.log('Setting intents...', intents);
 
-  router.RPC_METHODS.getOrder = async (payload) => {
+  await router.setIntents(intents).catch((e) => {
+    console.log('unable to set intents', e);
+    process.exit(1);
+  });
+
+  router.RPC_METHOD_ACTIONS.getOrder = async (payload) => {
     console.log('getOrder called with', payload);
     const { message, sender } = payload;
     const { id, makerAddress, makerToken, takerAddress, takerToken, takerAmount } = message;
@@ -139,8 +160,8 @@ const main = async () => {
 
     // validate our balance
     const price = await getPrice();
-    const requestedAmount = await Utils.wrapAsBigNumber(takerAmount);
-    const requiredMakerAmount = requestedAmount.dividedBy(price);
+    const requestedAmount = BigNumber(takerAmount);
+    const requiredMakerAmount = eighteenToFive(requestedAmount.dividedBy(price)).decimal(0);
 
     if (requiredMakerAmount.isLessThan(makerBalance)) {
       console.error(
@@ -154,7 +175,7 @@ const main = async () => {
 
     // Good to go
     const expiration = Math.round(new Date().getTime() / 1000) + 300; // Expire after 5 minutes
-    const makerAmount = requiredMakerAmount.decimalPlaces(0).toString();
+    const makerAmount = requiredMakerAmount.toString();
     const nonce = BigNumber(Math.random() * 100000).toFixed().toString();
 
     const order = {
@@ -177,7 +198,7 @@ const main = async () => {
     console.log('sent order', response);
   };
 
-  router.RPC_METHODS.getQuote = async (payload) => {
+  router.RPC_METHOD_ACTIONS.getQuote = async (payload) => {
     console.log('getQuote called with', payload);
     const { message, sender } = payload;
 
@@ -186,7 +207,7 @@ const main = async () => {
     const price = await getPrice();
     const requestedAmount = await Utils.wrapAsBigNumber(takerAmount);
     const requiredMakerAmount = requestedAmount.dividedBy(price);
-    const makerAmount = requiredMakerAmount.decimalPlaces(0).toString();
+    const makerAmount = eighteenToFive(requiredMakerAmount).decimalPlaces(0).toString();
 
     const result = { makerAddress, makerAmount, makerToken, takerAmount, takerToken };
 
@@ -197,20 +218,19 @@ const main = async () => {
     console.log('sent quote', response);
   };
 
-  router.RPC_METHODS.getMaxQuote = async (payload) => {
+  router.RPC_METHOD_ACTIONS.getMaxQuote = async (payload) => {
     console.log('getMaxQuote called with', payload);
     const { message, sender } = payload;
 
     const { id, makerAddress, makerToken, takerToken } = message;
-
 
     // get our token balance
     const makerBalance = await getBalance(makerAddress, makerToken);
 
     // get the max amount
     const price = await getPrice();
-    const takerAmount = makerBalance.toString();
-    const makerAmount = makerBalance.multipliedBy(price);
+    const makerAmount = makerBalance.toString();
+    const takerAmount = makerBalance.multipliedBy(price).decimal(0).toString() + thirteen;
 
     const result = { makerAddress, makerAmount, makerToken, takerAmount, takerToken };
 
