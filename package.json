@@ -1,0 +1,64 @@
+{
+  "name": "LSDi-airswap-bot",
+  "version": "0.0.1",
+  "description": "simple Airswap maker for LSDi position tokens",
+  "keywords": [
+    "Yellow Hat DAO",
+    "Airswap",
+    "MARKET Protocol",
+    "ethereum",
+    "blockchain",
+    "dApp",
+    "trading",
+    "derivatives",
+    "decentralized"
+  ],
+  "license": "MIT",
+  "author": "Dan Matthews <dan@cryptobuilders.io>",
+  "homepage": "https://github.com/carboclan/LSDi-airswap-bot",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/carboclan/LSDi-airswap-bot.git"
+  },
+  "bugs": {
+    "mail": "dan@cryptobuilders.io",
+    "url": "https://github.com/carboclan/LSDi-airswap-bot/issues"
+  },
+  "main": "lib/index.js",
+  "scripts": {
+    "build": "npm run lint && npm run clean && npx babel src --out-dir lib",
+    "clean": "rimraf ./coverage && rimraf ./lib",
+    "coveralls": "npm run test:cover && cat ./coverage/lcov.info | coveralls",
+    "lint": "eslint src",
+    "start" : "npm run build && node lib/index.js",
+    "test": "NODE_ENV=test jest",
+    "test:cover": "NODE_ENV=test jest --coverage",
+    "test:watch": "NODE_ENV=test jest --watch",
+    "watch": "npx nodemon --exec npm run build"
+  },
+  "dependencies": {
+    "airswap.js": "^0.1.7",
+    "bignumber.js": "^9.0.0",
+    "core-js": "^3.1.4",
+    "ethers": "4.0.30",
+    "node-fetch": "^2.6.0",
+    "regenerator-runtime": "^0.13.3",
+    "uuid": "^3.3.2"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.4.4",
+    "@babel/core": "^7.4.5",
+    "@babel/preset-env": "^7.4.5",
+    "babel-plugin-inline-json-import": "^0.3.2",
+    "coveralls": "3.0.4",
+    "eslint": "5.16.0",
+    "eslint-config-airbnb-base": "13.1.0",
+    "eslint-plugin-import": "2.17.3",
+    "flow-bin": "0.101.1",
+    "flow-typed": "2.5.2",
+    "fs-file-tree": "1.0.7",
+    "jest": "24.8.0",
+    "nodemon": "^1.19.1",
+    "rimraf": "2.6.3"
+  }
+}
