@@ -30,7 +30,7 @@
     "clean": "rimraf ./coverage && rimraf ./lib",
     "coveralls": "npm run test:cover && cat ./coverage/lcov.info | coveralls",
     "lint": "eslint src",
-    "start" : "npm run build && node lib/index.js",
+    "start": "npm run build && node lib/index.js",
     "test": "NODE_ENV=test jest",
     "test:cover": "NODE_ENV=test jest --coverage",
     "test:watch": "NODE_ENV=test jest --watch",

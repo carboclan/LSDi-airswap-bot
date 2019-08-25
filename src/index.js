@@ -3,7 +3,7 @@ import 'regenerator-runtime/runtime';
 
 import BigNumber from 'bignumber.js';
 import { ethers } from 'ethers';
-import { fetch } from 'node-fetch';
+import fetch from 'node-fetch';
 import Router from 'airswap.js/src/protocolMessaging';
 
 import { erc20Generic } from './abi/erc20Generic';
@@ -46,13 +46,17 @@ const requireAuthentication = true;
 const jsonrpc = '2.0';
 
 const getPrice = async () => {
-  const feed = await fetch(config.priceFeed);
+  const response = await fetch(config.priceFeed);
+  const feed = await response.json();
+  console.log('feed', feed);
 
-  const { value } = feed[0].supply_rate;
+  const { value } = feed.cToken[0].supply_rate;
 
   // TODO: Any math here... rounding!!
-  return BigNumber(value).multiplyBy(100).dp(2);
+  return BigNumber(value).multipliedBy(100).dp(2);
 };
+
+getPrice();
 
 console.log('erc20', erc20Generic);
 
@@ -139,12 +143,8 @@ const main = async () => {
   router.RPC_METHOD_ACTIONS.getOrder = async (payload) => {
     console.log('getOrder called with', payload);
     const { message, sender } = payload;
-    const { id, makerAddress, makerToken, takerAddress, takerToken, takerAmount } = message;
-
-    if (makerAddress !== address) {
-      console.error('Maker address is not for this bot!', makerAddress);
-      return;
-    }
+    const { id, makerToken, takerAddress, takerToken, takerAmount } = message.params;
+    const makerAddress = address;
 
     // get their token balance
     const takerBalance = await getBalance(takerAddress, takerToken);
@@ -161,7 +161,7 @@ const main = async () => {
     // validate our balance
     const price = await getPrice();
     const requestedAmount = BigNumber(takerAmount);
-    const requiredMakerAmount = eighteenToFive(requestedAmount.dividedBy(price)).decimal(0);
+    const requiredMakerAmount = eighteenToFive(requestedAmount.dividedBy(price)).dp(0);
 
     if (requiredMakerAmount.isLessThan(makerBalance)) {
       console.error(
@@ -189,6 +189,8 @@ const main = async () => {
       takerToken,
     };
 
+    console.log('ORDER', order);
+
     const result = await signOrder(order);
 
     const response = { id, jsonrpc, result };
@@ -202,12 +204,12 @@ const main = async () => {
     console.log('getQuote called with', payload);
     const { message, sender } = payload;
 
-    const { id, makerAddress, makerToken, takerAmount, takerToken } = message;
+    const { id, makerAddress, makerToken, takerAmount, takerToken } = message.params;
 
     const price = await getPrice();
     const requestedAmount = await Utils.wrapAsBigNumber(takerAmount);
     const requiredMakerAmount = requestedAmount.dividedBy(price);
-    const makerAmount = eighteenToFive(requiredMakerAmount).decimalPlaces(0).toString();
+    const makerAmount = eighteenToFive(requiredMakerAmount).dp(0).toString();
 
     const result = { makerAddress, makerAmount, makerToken, takerAmount, takerToken };
 
@@ -222,7 +224,7 @@ const main = async () => {
     console.log('getMaxQuote called with', payload);
     const { message, sender } = payload;
 
-    const { id, makerAddress, makerToken, takerToken } = message;
+    const { id, makerAddress, makerToken, takerToken } = message.params;
 
     // get our token balance
     const makerBalance = await getBalance(makerAddress, makerToken);
@@ -230,7 +232,7 @@ const main = async () => {
     // get the max amount
     const price = await getPrice();
     const makerAmount = makerBalance.toString();
-    const takerAmount = makerBalance.multipliedBy(price).decimal(0).toString() + thirteen;
+    const takerAmount = makerBalance.multipliedBy(price).dp(0).toString() + thirteen;
 
     const result = { makerAddress, makerAmount, makerToken, takerAmount, takerToken };
 
