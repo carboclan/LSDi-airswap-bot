@@ -37,23 +37,54 @@ const config = {
 
 const provider = ethers.getDefaultProvider();
 
-const wallet = new ethers.Wallet(config.privateKey);
+const wallet = new ethers.Wallet(config.privateKey, provider);
 
 const address = wallet.address.toLowerCase();
 const keyspace = false;
 const messageSigner = data => wallet.signMessage(data);
 const requireAuthentication = true;
 const jsonrpc = '2.0';
+const airswapExchangeAddress = '0x8fd3121013a07c57f0d69646e86e7a4880b467b7';
+
+// Give the AirSwap smart contract permission to transfer an ERC20 token.
+// * Must call `approveTokenForTrade` one time for each token you want to trade
+// * Optionally pass an object to configure gas settings
+// * returns a `Promise`
+const enableToken = async (tokenAddress) => {
+  console.log('Enabling token', tokenAddress);
+  const gasLimit = 160000;
+  const gasPrice = ethers.utils.parseEther('0.000000040');
+
+  const tokenContract = new ethers.Contract(tokenAddress, erc20Generic, wallet);
+
+  const approved = await tokenContract.allowance(address, airswapExchangeAddress);
+
+  if (BigNumber(approved).isGreaterThan(0)) {
+    console.log('Already enabled', tokenAddress);
+    return true;
+  }
+
+  console.log('Sending approve transaction', tokenAddress);
+
+  return tokenContract.approve(
+    airswapExchangeAddress,
+    '115792089237316195423570985008687907853269984665640564039457584007913129639935',
+    { gasLimit, gasPrice },
+  );
+};
 
 const getPrice = async () => {
   const response = await fetch(config.priceFeed);
   const feed = await response.json();
-  console.log('feed', feed);
+  // console.log('feed', feed);
 
   const { value } = feed.cToken[0].supply_rate;
 
   // TODO: Handle the Long position pricing
-  return BigNumber(value).multipliedBy(100).minus(6).dp(2);
+  const price = BigNumber(value).multipliedBy(100).minus(6).dp(2);
+  console.log('Price is', price.toString());
+
+  return price;
 };
 
 getPrice();
@@ -124,6 +155,14 @@ const main = async () => {
 
   const intents = [];
 
+  await enableToken(config.collateralAddress);
+
+  // eslint-disable-next-line no-plusplus
+  for (let i = 0; i < tokens.length; i++) {
+    // eslint-disable-next-line no-await-in-loop
+    await enableToken(tokens[i]);
+  }
+
   config.tokens.forEach((token) => {
     intents.push({
       makerToken: token,
@@ -149,8 +188,8 @@ const main = async () => {
     const requestedMakerAmount = BigNumber(makerAmount);
 
     if (requestedMakerAmount.isZero()) {
-      console.warn('Zero amount order request halted');
-      // return;
+      console.log('Zero amount order request halted');
+      return;
     }
 
     // get our token balance
@@ -158,7 +197,7 @@ const main = async () => {
 
     // validate our balance
     if (makerBalance.isLessThan(requestedMakerAmount)) {
-      console.error(
+      console.log(
         'Insufficient maker balance',
         requestedMakerAmount.toString(),
         '<',
@@ -175,7 +214,7 @@ const main = async () => {
 
     // validate the balance
     if (takerBalance.isLessThan(takerAmount)) {
-      console.error('Insufficient taker balance', takerBalance.toString(), '<', takerAmount);
+      console.log('Insufficient taker balance', takerBalance.toString(), '<', takerAmount);
       return;
     }
 

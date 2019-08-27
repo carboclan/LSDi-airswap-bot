@@ -1,4 +1,5 @@
 node_modules
+debug.out
 coverage
 coverage.json
 .nyc_output
