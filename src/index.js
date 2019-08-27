@@ -52,8 +52,8 @@ const getPrice = async () => {
 
   const { value } = feed.cToken[0].supply_rate;
 
-  // TODO: Any math here... rounding!!
-  return BigNumber(value).multipliedBy(100).dp(2);
+  // TODO: Handle the Long position pricing
+  return BigNumber(value).multipliedBy(100).minus(6).dp(2);
 };
 
 getPrice();
@@ -143,8 +143,32 @@ const main = async () => {
   router.RPC_METHOD_ACTIONS.getOrder = async (payload) => {
     console.log('getOrder called with', payload);
     const { message, sender } = payload;
-    const { id, makerToken, takerAddress, takerToken, takerAmount } = message.params;
+    const { id, params } = message;
+    const { makerToken, takerAddress, takerToken, makerAmount } = params;
     const makerAddress = address;
+    const requestedMakerAmount = BigNumber(makerAmount);
+
+    if (requestedMakerAmount.isZero()) {
+      console.warn('Zero amount order request halted');
+      // return;
+    }
+
+    // get our token balance
+    const makerBalance = await getBalance(makerAddress, makerToken);
+
+    // validate our balance
+    if (makerBalance.isLessThan(requestedMakerAmount)) {
+      console.error(
+        'Insufficient maker balance',
+        requestedMakerAmount.toString(),
+        '<',
+        makerBalance.toString(),
+      );
+      return;
+    }
+
+    const price = await getPrice();
+    const takerAmount = requestedMakerAmount.multipliedBy(price).toString() + thirteen;
 
     // get their token balance
     const takerBalance = await getBalance(takerAddress, takerToken);
@@ -155,28 +179,9 @@ const main = async () => {
       return;
     }
 
-    // get our token balance
-    const makerBalance = await getBalance(makerAddress, makerToken);
-
-    // validate our balance
-    const price = await getPrice();
-    const requestedAmount = BigNumber(takerAmount);
-    const requiredMakerAmount = eighteenToFive(requestedAmount.dividedBy(price)).dp(0);
-
-    if (requiredMakerAmount.isLessThan(makerBalance)) {
-      console.error(
-        'Insufficient maker balance',
-        makerBalance.toString(),
-        '<',
-        requiredMakerAmount.toString(),
-      );
-      return;
-    }
-
     // Good to go
-    const expiration = Math.round(new Date().getTime() / 1000) + 300; // Expire after 5 minutes
-    const makerAmount = requiredMakerAmount.toString();
-    const nonce = BigNumber(Math.random() * 100000).toFixed().toString();
+    const expiration = Math.round(new Date().getTime() / 1000) + 600; // Expire after 5 minutes
+    const nonce = Number(Math.random() * 100000).toFixed().toString();
 
     const order = {
       expiration,
@@ -203,8 +208,8 @@ const main = async () => {
   router.RPC_METHOD_ACTIONS.getQuote = async (payload) => {
     console.log('getQuote called with', payload);
     const { message, sender } = payload;
-
-    const { id, makerAddress, makerToken, takerAmount, takerToken } = message.params;
+    const { id, params } = message;
+    const { makerAddress, makerToken, takerAmount, takerToken } = params;
 
     const price = await getPrice();
     const requestedAmount = await Utils.wrapAsBigNumber(takerAmount);
@@ -223,8 +228,9 @@ const main = async () => {
   router.RPC_METHOD_ACTIONS.getMaxQuote = async (payload) => {
     console.log('getMaxQuote called with', payload);
     const { message, sender } = payload;
-
-    const { id, makerAddress, makerToken, takerToken } = message.params;
+    const { id, params } = message;
+    const { makerToken, takerToken } = params;
+    const makerAddress = address;
 
     // get our token balance
     const makerBalance = await getBalance(makerAddress, makerToken);
