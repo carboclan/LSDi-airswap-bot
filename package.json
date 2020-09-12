@@ -41,7 +41,7 @@
     "bignumber.js": "^9.0.0",
     "core-js": "^3.1.4",
     "ethers": "4.0.30",
-    "node-fetch": "^2.6.0",
+    "node-fetch": "^2.6.1",
     "regenerator-runtime": "^0.13.3",
     "uuid": "^3.3.2"
   },
